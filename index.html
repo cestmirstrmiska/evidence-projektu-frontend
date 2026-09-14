@@ -22,12 +22,9 @@
         .form-group { margin-bottom: 1rem; }
         .form-label { display: block; margin-bottom: 0.25rem; font-weight: 600; color: #374151; font-size: 0.9rem; }
         .form-control { display: block; width: 100%; padding: 0.5rem 0.75rem; font-size: 0.95rem; color: #1f2937; background-color: #fff; border: 1px solid #d1d5db; border-radius: 0.375rem; box-sizing: border-box; }
-
-        /* Nové: Rozvržení pro vyhledávání a filtr vedle sebe */
         .filter-row { display: flex; gap: 1rem; margin-bottom: 1rem; }
         .filter-row .form-group { flex: 1; margin-bottom: 0; }
-
-        .btn { display: inline-block; font-weight: 600; text-align: center; padding: 0.5rem 1rem; font-size: 0.95rem; border-radius: 0.375rem; cursor: pointer; border: 1px solid transparent; width: 100%; box-sizing: border-box; }
+        .btn { display: inline-block; font-weight: 600; text-align: center; padding: 0.5rem 1rem; font-size: 0.95rem; border-radius: 0.375rem; cursor: pointer; border: 1px solid transparent; width: 100%; box-sizing: border-box; transition: all 0.15s ease; }
         .btn-primary { color: #fff; background-color: #2563eb; } .btn-success { color: #fff; background-color: #16a34a; } .btn-secondary { color: #374151; background-color: #e5e7eb; margin-top: 0.5rem; }
         .btn-sm { padding: 0.2rem 0.4rem; font-size: 0.8rem; border-radius: 0.25rem; width: auto; display: inline-block; margin-right: 0.25rem; text-decoration: none; cursor: pointer; }
         .btn-danger-sm { color: #fff; background-color: #dc2626; } .btn-warning-sm { color: #1f2937; background-color: #f59e0b; }
@@ -52,7 +49,6 @@
                 <div class="card">
                     <div class="card-header header-projects"><span>📁 Přehled projektů</span></div>
                     <div class="card-body">
-                        <!-- Filtr a vyhledávání vedle sebe -->
                         <div class="filter-row">
                             <div class="form-group">
                                 <label class="form-label">🔍 Vyhledat v projektech</label>
@@ -94,7 +90,18 @@
                             <div class="form-group"><label class="form-label">Popis</label><textarea id="form-projekt-popis" class="form-control" rows="2"></textarea></div>
                             <div class="form-group"><label class="form-label">Začátek</label><input type="date" id="form-projekt-start" class="form-control" required></div>
                             <div class="form-group"><label class="form-label">Konec</label><input type="date" id="form-projekt-end" class="form-control"></div>
-                            <div class="form-group"><label class="form-label">Stav</label><input type="text" id="form-projekt-stav" class="form-control" required></div>
+
+                            <!-- UPRAVENO: Stav projektu je nyní bezpečný select box -->
+                            <div class="form-group">
+                                <label class="form-label">Stav projektu</label>
+                                <select id="form-projekt-stav" class="form-control" required>
+                                    <option value="Příprava">Příprava</option>
+                                    <option value="V realizaci">V realizaci</option>
+                                    <option value="Pozastaven">Pozastaven</option>
+                                    <option value="Dokončen">Dokončen</option>
+                                </select>
+                            </div>
+
                             <div class="form-group"><label class="form-label">Tým (Ctrl + klik)</label><select id="form-projekt-clenove" class="form-control" multiple style="height:100px;"></select></div>
                             <button type="submit" class="btn btn-primary" id="btn-submit-projekt">Uložit projekt</button>
                             <button type="button" class="btn btn-secondary" id="btn-reset-projekt" onclick="vynulujProjektFormular()" style="display:none;">Zrušit</button>
@@ -115,12 +122,9 @@
                             </div>
                             <div class="form-group">
                                 <label class="form-label">💼 Filtr podle pozice</label>
+                                <!-- Vyčištěný select box, který JavaScript naplní dynamicky z API -->
                                 <select id="filter-person-role" class="form-control" onchange="filtrZmenaOsob()">
                                     <option value="">-- Všechny pozice --</option>
-                                    <option value="Developer">Developer</option>
-                                    <option value="Senior Developer">Senior Developer</option>
-                                    <option value="Manažer">Manažer</option>
-                                    <option value="Scrum Master">Scrum Master</option>
                                 </select>
                             </div>
                         </div>
@@ -162,7 +166,12 @@
         let projektStranka = 1, projektHledanyText = "", projektVybranyStav = "";
         let osobaStranka = 1, osobaHledanyText = "", osobaVybranaPozice = "";
 
-        document.addEventListener("DOMContentLoaded", () => { nactiProjekty(); nactiOsoby(); nactiVsechnyOsobyProSelect(); });
+        document.addEventListener("DOMContentLoaded", () => {
+            nactiProjekty();
+            nactiOsoby();
+            nactiVsechnyOsobyProSelect();
+            nactiDynamickePozice(); // NOVÉ: Načte unikátní pozice z DB pro rozbalovací filtr
+        });
 
         function nactiProjekty() {
             let url = `${API_BASE}/projekty/?page=${projektStranka}`;
@@ -186,6 +195,26 @@
                 document.getElementById("btn-person-next").disabled = !data.next;
                 document.getElementById("info-person-page").textContent = `Stránka ${osobaStranka}`;
             }).catch(err => console.error(err));
+        }
+
+        // NOVÉ: Asynchronní načtení unikátních pozic z API pro dynamický filtr
+        function nactiDynamickePozice() {
+            fetch(`${API_BASE}/osoby/pozice/`)
+                .then(res => res.json())
+                .then(pozice => {
+                    const select = document.getElementById("filter-person-role");
+                    // Ponecháme pouze výchozí volbu "Všechny pozice"
+                    select.innerHTML = '<option value="">-- Všechny pozice --</option>';
+                    pozice.forEach(p => {
+                        const opt = document.createElement("option");
+                        opt.value = p;
+                        opt.textContent = p;
+                        // Pokud zrovna podle této pozice filtrujeme, označíme ji jako vybranou
+                        if (p === osobaVybranaPozice) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+                })
+                .catch(err => console.error(err));
         }
 
         function nactiVsechnyOsobyProSelect() {
@@ -247,8 +276,15 @@
             if (confirm("Opravdu smazat?")) {
                 fetch(`${API_BASE}/${endpoint}/${id}/`, { method: "DELETE" }).then(res => {
                     if (res.ok) {
-                        if (endpoint === "projekty") { nactiProjekty(); if(document.getElementById("form-projekt-id").value == id) vynulujProjektFormular(); }
-                        else { nactiOsoby(); nactiVsechnyOsobyProSelect(); if(document.getElementById("form-osoba-id").value == id) vynulujOsobuFormular(); }
+                        if (endpoint === "projekty") {
+                            nactiProjekty();
+                            if(document.getElementById("form-projekt-id").value == id) vynulujProjektFormular();
+                        } else {
+                            nactiOsoby();
+                            nactiVsechnyOsobyProSelect();
+                            nactiDynamickePozice(); // Aktualizace dynamického filtru po smazání role
+                            if(document.getElementById("form-osoba-id").value == id) vynulujOsobuFormular();
+                        }
                     }
                 }).catch(err => console.error(err));
             }
@@ -260,9 +296,16 @@
             document.getElementById("form-projekt-popis").value = p.popis || "";
             document.getElementById("form-projekt-start").value = p.start_date;
             document.getElementById("form-projekt-end").value = p.end_date || "";
-            document.getElementById("form-projekt-stav").value = p.stav;
-            const select = document.getElementById("form-projekt-clenove");
-            for (let i = 0; i < select.options.length; i++) select.options[i].selected = p.clenove.includes(parseInt(select.options[i].value));
+
+            // Správné předvybrání stavu v rozbalovacím seznamu projektu
+            const selectStav = document.getElementById("form-projekt-stav");
+            for (let i = 0; i < selectStav.options.length; i++) {
+                selectStav.options[i].selected = (selectStav.options[i].value === p.stav);
+            }
+
+            const selectClenove = document.getElementById("form-projekt-clenove");
+            for (let i = 0; i < selectClenove.options.length; i++) selectClenove.options[i].selected = p.clenove.includes(parseInt(selectClenove.options[i].value));
+
             document.getElementById("karta-projektu-form").classList.add("card-edit-mode");
             document.getElementById("hlavicka-projektu-form").classList.add("header-edit-mode");
             document.getElementById("nadpis-projektu-form").innerText = `✏️ Úprava: ${p.nazev}`;
@@ -285,11 +328,21 @@
             e.preventDefault(); const id = document.getElementById("form-projekt-id").value;
             const box = document.getElementById("error-project-box"); box.style.display = "none";
             const sel = document.getElementById("form-projekt-clenove");
+
+            // NOVÉ: Bezpečné ošetření prázdného výběru osob
+            const vybraneOsoby = sel.selectedOptions.length > 0
+                ? Array.from(sel.selectedOptions).map(o => parseInt(o.value))
+                : []; // Pokud nikdo není vybrán, pošle se čisté prázdné pole
+
             const data = {
-                nazev: document.getElementById("form-projekt-nazev").value, popis: document.getElementById("form-projekt-popis").value,
-                start_date: document.getElementById("form-projekt-start").value, end_date: document.getElementById("form-projekt-end").value || null,
-                stav: document.getElementById("form-projekt-stav").value, clenove: Array.from(sel.selectedOptions).map(o => parseInt(o.value))
+                nazev: document.getElementById("form-projekt-nazev").value,
+                popis: document.getElementById("form-projekt-popis").value,
+                start_date: document.getElementById("form-projekt-start").value,
+                end_date: document.getElementById("form-projekt-end").value || null,
+                stav: document.getElementById("form-projekt-stav").value,
+                clenove: vybraneOsoby // <-- Použijeme ošetřenou proměnnou
             };
+
             fetch(id ? `${API_BASE}/projekty/${id}/` : `${API_BASE}/projekty/`, {
                 method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
             }).then(async res => {
@@ -298,6 +351,7 @@
                 else { box.innerHTML = `⚠️ ${json.end_date || (json.nazev ? 'Projekt s tímto názvem existuje.' : JSON.stringify(json))}`; box.style.display = "block"; }
             }).catch(err => console.error(err));
         }
+
 
         function pripravUpravuOsoby(o) {
             document.getElementById("form-osoba-id").value = o.id; document.getElementById("form-osoba-jmeno").value = o.jmeno;
@@ -333,8 +387,12 @@
                 method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
             }).then(async res => {
                 const json = await res.json();
-                if (res.ok) { nactiOsoby(); nactiVsechnyOsobyProSelect(); vynulujOsobuFormular(); }
-                else { box.innerHTML = `⚠️ ${json.email ? 'Tento e-mail již v registru existuje.' : JSON.stringify(json)}`; box.style.display = "block"; }
+                if (res.ok) {
+                    nactiOsoby();
+                    nactiVsechnyOsobyProSelect();
+                    nactiDynamickePozice(); // Aktualizace dynamického filtru po přidání/změně pozice
+                    vynulujOsobuFormular();
+                } else { box.innerHTML = `⚠️ ${json.email ? 'Tento e-mail již v registru existuje.' : JSON.stringify(json)}`; box.style.display = "block"; }
             }).catch(err => console.error(err));
         }
     </script>
